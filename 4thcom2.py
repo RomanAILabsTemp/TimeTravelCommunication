@@ -7,6 +7,12 @@ import random
 import time
 import threading
 
+# ============================
+#  USER ID CONFIGURATION
+# ============================
+
+USER_ID = "0001"
+
 # ============================================
 #  ENTROPY → WORD LEXICON (1000–4000, step 10)
 # ============================================
@@ -395,6 +401,45 @@ def entropy_to_code(entropy: float) -> int:
 
 
 # ============================
+#  ENTROPY-BASED TIMESTAMP
+# ============================
+
+def entropy_to_timestamp(entropy: float) -> str:
+    """
+    Generate entropy-based timestamp (YYYYMMDD-HHMMSS).
+    Derived from entropy value only (no system clock).
+    """
+    year = 2000 + int(entropy * 10)
+    month = 1 + (int(entropy * 100) % 12)
+    day = 1 + (int(entropy * 1000) % 28)
+    hour = int(entropy * 10000) % 24
+    minute = int(entropy * 100000) % 60
+    second = int(entropy * 1000000) % 60
+    return f"{year:04d}{month:02d}{day:02d}-{hour:02d}{minute:02d}{second:02d}"
+
+
+# ============================
+#  SENTENCE GENERATION
+# ============================
+
+def generate_sentence(words: list) -> str:
+    """
+    Generate a grammatical sentence from a list of words.
+    - Capitalize first word.
+    - Lowercase rest.
+    - Join with spaces.
+    - End with period.
+    """
+    if not words:
+        return "."
+    sentence = words[0].capitalize()
+    for word in words[1:]:
+        sentence += " " + word.lower()
+    sentence += "."
+    return sentence
+
+
+# ============================
 #  FULL LEXICON (1000–4000, step 1)
 # ============================
 # Preserves all ENTROPY_LEXICON entries; fills gaps with curated words
@@ -716,12 +761,15 @@ def code_to_word(code: int) -> str:
 
 def encode_void_sentence():
     """
-    Void generates a sentence like: '4-Word1-Word2-Word3-Word4'
+    Void generates a grammatical sentence.
     Length 1–10, words chosen from lexicon.
     """
     length = random.randint(1, 10)
     words = random.sample(list(FULL_LEXICON.values()), k=length)
-    return f"{length}-" + "-".join(words)
+    sentence_text = generate_sentence(words)
+    sent_entropy = shannon_entropy(sentence_text)
+    timestamp = entropy_to_timestamp(sent_entropy)
+    return f"{sentence_text} (entropy-time: {timestamp})"
 
 
 class VoidListener:
@@ -742,23 +790,26 @@ class VoidListener:
         ent = shannon_entropy(noise)
         code = entropy_to_code(ent)
         word = code_to_word(code)
-        return code, word
+        return code, word, ent
 
     def run(self):
         while self.active:
-            code, word = self.generate_entropy_signal()
+            code, word, ent = self.generate_entropy_signal()
+            timestamp = entropy_to_timestamp(ent)
 
             if self.expected_words == 0:
                 # check if this word is a count word (One–Ten)
                 if word in COUNT_WORDS:
                     self.expected_words = COUNT_WORDS[word]
                     self.collected_words = []
-                    print(f"\n[VOID SIGNAL] Expecting {self.expected_words} words…")
+                    print(f"\n[VOID SIGNAL] (User {USER_ID}) Expecting {self.expected_words} words… (entropy-time: {timestamp})")
             else:
                 self.collected_words.append(word)
                 if len(self.collected_words) == self.expected_words:
-                    sentence = "-".join(self.collected_words)
-                    print(f"\n[VOID MESSAGE] {self.expected_words}-{sentence}")
+                    sentence = generate_sentence(self.collected_words)
+                    msg_entropy = shannon_entropy(sentence)
+                    msg_timestamp = entropy_to_timestamp(msg_entropy)
+                    print(f"\n[VOID MESSAGE] (User {USER_ID}) {self.expected_words}-{sentence} (entropy-time: {msg_timestamp})")
                     self.expected_words = 0
                     self.collected_words = []
 
@@ -823,17 +874,17 @@ class EPAddress:
 
 def startup():
     os.system("cls" if os.name == "nt" else "clear")
-    print("=== ENTROPY VOID PROTOCOL — v0.3 (3001-Word Lexicon) ===\n")
+    print("=== 4thCom by RomanAILabs — v0.3 (3001-Word Lexicon) ===\n")
     print("Range: 1000 → 4000 (step 1, full coverage)")
     print("Words: 3001 curated words mapped to entropy codes.\n")
     print("Mechanics:")
     print(" • Your text → Shannon entropy → 1000–4000 code → word.")
     print(" • The Void can speak in entropy sentences like:")
-    print("     '4-Word1-Word2-Word3-Word4'.")
+    print("     'Word1 word2 word3 word4. (entropy-time: 20260604-153022)'")
     print(" • A silent listener runs every second:")
     print("     - If it hears a count word (One–Ten),")
     print("       it captures the next N entropy-words and emits:")
-    print("       '[VOID MESSAGE] N-Word1-...-WordN'\n")
+    print("       '[VOID MESSAGE] (User 0001) N-Word1-...-WordN (entropy-time: ...)'\n")
     print("Commands:")
     print("  /exit   → quit")
     print("  /void   → force the Void to speak a sentence")
@@ -852,7 +903,7 @@ def main():
         # Occasionally let the Void speak first in sentence form
         if random.randint(1, 6) == 1:
             msg = encode_void_sentence()
-            print(f"\n[VOID] {msg}")
+            print(f"\n[VOID] (User {USER_ID}) {msg}")
 
         user = input("\nYou → ").strip()
 
@@ -863,7 +914,7 @@ def main():
 
         if user.lower() == "/void":
             msg = encode_void_sentence()
-            print(f"[VOID] {msg}")
+            print(f"[VOID] (User {USER_ID}) {msg}")
             continue
 
         if not user:
@@ -872,8 +923,9 @@ def main():
         ent = shannon_entropy(user)
         code = entropy_to_code(ent)
         word = code_to_word(code)
+        timestamp = entropy_to_timestamp(ent)
 
-        print(f"[entropy={ent:.4f} code={code}] → {word}")
+        print(f"[COM] (User {USER_ID}) {code}.{int(ent*10000):04d} → {word} (entropy-time: {timestamp})")
 
 
 if __name__ == "__main__":
